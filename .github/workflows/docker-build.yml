@@ -3,10 +3,14 @@ on:
   push:
     branches:
       - master
+  workflow_dispatch:
 jobs:
   publish:
-    name: Push image to Docker Hub
+    name: Push image to GHCR
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Check out the git repo
         uses: actions/checkout@v3
@@ -15,18 +19,24 @@ jobs:
         run: echo "PATCH=$(ls -1 | tail -n 1 | xargs -I{}  basename {} .sql)" >> $GITHUB_ENV
         working-directory: ./patches
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v1
-        with:
-          username: ${{ vars.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+      - name: Image name
+        env:
+          OWNER: ${{ github.repository_owner }}
+        run: echo "IMAGE=ghcr.io/${OWNER,,}/ab-migration-manager" >> $GITHUB_ENV
 
-      - name: Build and push to Docker Hub
-        uses: docker/build-push-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push to GHCR
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
+          labels: org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           tags: |
-            digiserve/ab-migration-manager:master,
-            digiserve/ab-migration-manager:${{ env.PATCH }}
-            
+            ${{ env.IMAGE }}:master
+            ${{ env.IMAGE }}:${{ env.PATCH }}
